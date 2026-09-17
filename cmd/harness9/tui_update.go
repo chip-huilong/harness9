@@ -368,7 +368,7 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// 显示用户消息
-			m.lines = append(m.lines, userMsgStyle.Render("▶ You: ")+raw)
+			m.lines = appendUserMessageLine(m.lines, raw)
 			// 新一轮用户消息开始：清空上一轮残留的子代理流式进度行，避免陈旧内容滞留。
 			// 仅在 LLM 路径（含 /new、/resume、普通 prompt）重置；autoExecuting 续跑走 dispatch
 			// 不经过此处，因此续跑期间子代理进度可跨 EventDone 保留。
@@ -709,6 +709,8 @@ func (m tuiModel) handleEvent(evt engine.Event) (tea.Model, tea.Cmd) {
 		if len(m.lines) > 0 && m.lines[len(m.lines)-1] == "" {
 			m.lines[len(m.lines)-1] = doneStyle.Render("  ✅ 任务完成")
 		}
+		// 回答结束后追加两个空行，与下一条用户输入形成视觉间距
+		m.lines = append(m.lines, "", "")
 		m.input.Focus()
 		return m, textinput.Blink
 
@@ -843,6 +845,9 @@ func (m tuiModel) scrollHeight() int {
 	}
 	if len(m.sandboxes) > 0 {
 		reserved++ // + SandboxBar
+	}
+	if m.renderMCPBar() != "" {
+		reserved++ // + MCPBar
 	}
 	h := m.height - reserved
 	if h < 1 {
@@ -1255,9 +1260,17 @@ func (m tuiModel) harvestSubAgentResults() tuiModel {
 	return m
 }
 
+// appendUserMessageLine 在新的用户消息前补一个空行，让连续多轮对话更容易扫读。
+func appendUserMessageLine(lines []string, raw string) []string {
+	if len(lines) > 0 && lines[len(lines)-1] != "" {
+		lines = append(lines, "")
+	}
+	return append(lines, userMsgStyle.Render("▶ You: ")+raw)
+}
+
 // dispatchMention 解析 @<name> <task> 并前台直跑指定子代理（绕过主 LLM）。
 func (m tuiModel) dispatchMention(raw string) (tuiModel, tea.Cmd) {
-	m.lines = append(m.lines, userMsgStyle.Render("▶ You: ")+raw)
+	m.lines = appendUserMessageLine(m.lines, raw)
 	body := strings.TrimSpace(strings.TrimPrefix(raw, "@"))
 	name, task, _ := strings.Cut(body, " ")
 	task = strings.TrimSpace(task)

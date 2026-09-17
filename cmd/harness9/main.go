@@ -30,6 +30,7 @@ import (
 	harctx "github.com/harness9/internal/context"
 	"github.com/harness9/internal/engine"
 	"github.com/harness9/internal/env"
+	feishugateway "github.com/harness9/internal/gateway/feishu"
 	"github.com/harness9/internal/hooks"
 	"github.com/harness9/internal/logfmt"
 	"github.com/harness9/internal/ltm"
@@ -71,6 +72,12 @@ func main() {
 		return
 	}
 
+	gatewayMode := len(os.Args) > 1 && os.Args[1] == "gateway"
+	if gatewayMode {
+		// gateway 使用主命令的通用 flags；移除子命令后交给标准 flag 包解析。
+		os.Args = append([]string{os.Args[0]}, os.Args[2:]...)
+	}
+
 	versionMode := flag.Bool("version", false, "打印版本号并退出")
 	promptFile := flag.String("prompt-file", "", "从文件读取完整 prompt，非交互执行一次后退出（用于评测/CI 场景）")
 	flag.Usage = func() {
@@ -87,6 +94,7 @@ Flags:
 
 命令：
   upgrade     升级 harness9 到最新版本
+  gateway     启动飞书 Gateway（长连接模式）
 
 环境变量：
   LLM_MODEL           模型名称（默认：openai/gpt-4o-mini）
@@ -95,10 +103,14 @@ Flags:
   ORCAROUTER_API_KEY  OrcaRouter 网关 API Key（可选）
   ORCAROUTER_BASE_URL OrcaRouter 网关地址（可选，默认官方地址）
   LLM_PROVIDER        显式指定 Provider：openai / orcarouter（可选）
+  FEISHU_APP_ID     飞书应用 App ID（gateway 必填）
+  FEISHU_APP_SECRET 飞书应用 App Secret（gateway 必填）
+
 
 示例：
   harness9                  启动（TTY 自动进入 TUI，管道模式退回 CLI REPL）
   harness9 --version        查看版本号
+  harness9 gateway          启动飞书 Gateway
   harness9 upgrade          升级到最新版本
 `)
 	}
@@ -451,6 +463,23 @@ Flags:
 	eng := engine.NewAgentEngine(llm, hookReg, workDir, engOpts...)
 
 	switch {
+	case gatewayMode:
+		agent, err := feishugateway.NewSessionAgent(eng, mgr)
+		if err != nil {
+			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("创建 Gateway Agent 失败: %v", err)))
+		}
+
+		gateway, err := feishugateway.New(feishugateway.Config{
+			AppID:     os.Getenv("FEISHU_APP_ID"),
+			AppSecret: os.Getenv("FEISHU_APP_SECRET"),
+		}, agent)
+		if err != nil {
+			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("创建飞书 Gateway 失败: %v", err)))
+		}
+		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 飞书 Gateway 启动 │ workDir=%s", workDir)))
+		if err := gateway.Run(ctx); err != nil {
+			log.Fatal(logfmt.FormatMsg("main", fmt.Sprintf("飞书 Gateway 退出: %v", err)))
+		}
 	case *promptFile != "":
 		log.Print(logfmt.FormatMsg("main", fmt.Sprintf("harness9 单次执行模式 │ workDir=%s promptFile=%s", workDir, *promptFile)))
 		if err := RunOnce(ctx, eng, *promptFile); err != nil {

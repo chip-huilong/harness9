@@ -10,7 +10,7 @@
 //   - renderStatusBar()      — 常驻状态栏（model/mode/workdir/token）
 //   - renderApprovalDialog() — 工具审批对话框（模态）
 //   - renderTaskPanel()      — 后台任务面板（模态）
-//   - renderInput()          — 底部输入框（含 Shell 模式适配）
+//   - renderInput()          — 输入行（含 Shell/Plan 模式适配）
 //   - renderFooter()         — 底部快捷键提示行
 //   - renderPlanLines()      — todo 任务列表快照行
 //   - accentStyle()          — 当前模式对应的强调色
@@ -140,14 +140,17 @@ func (m tuiModel) renderPlanLines(items []planning.PlanItem) []string {
 
 // renderConversation 渲染对话历史区（Scrollback）。
 // scrollH 为可显示行数（由 scrollHeight() 计算）。
+// 内容不足一屏时不做填充，避免在 inline 模式下挤占终端已有输出。
 func (m tuiModel) renderConversation(scrollH int) string {
+	if len(m.lines) == 0 {
+		return ""
+	}
 	var scrollLines []string
 	if m.viewTop < 0 || len(m.lines) <= scrollH {
 		if len(m.lines) >= scrollH {
 			scrollLines = m.lines[len(m.lines)-scrollH:]
 		} else {
-			pad := make([]string, scrollH-len(m.lines))
-			scrollLines = append(pad, m.lines...)
+			scrollLines = m.lines
 		}
 	} else {
 		start := m.viewTop
@@ -156,10 +159,6 @@ func (m tuiModel) renderConversation(scrollH int) string {
 			end = len(m.lines)
 		}
 		scrollLines = m.lines[start:end]
-		if len(scrollLines) < scrollH {
-			pad := make([]string, scrollH-len(scrollLines))
-			scrollLines = append(pad, scrollLines...)
-		}
 	}
 	return strings.Join(scrollLines, "\n")
 }
@@ -503,10 +502,10 @@ func (m tuiModel) View() string {
 
 	if m.phase == phaseWelcome {
 		sb.WriteString(bannerContent(m.width))
-		sb.WriteByte('\n')
-		sb.WriteString(m.renderStatusBar())
-		sb.WriteByte('\n')
+		sb.WriteString("\n\n\n")
 		sb.WriteString(m.renderInput())
+		sb.WriteString("\n\n\n")
+		sb.WriteString(m.renderStatusBar())
 		sb.WriteByte('\n')
 		sb.WriteString(m.renderFooter())
 	} else {
@@ -549,6 +548,9 @@ func (m tuiModel) View() string {
 			sb.WriteString(m.renderStatusBar())
 			return sb.String()
 		}
+		sb.WriteString("\n\n")
+		sb.WriteString(m.renderInput())
+		sb.WriteString("\n\n\n")
 		sb.WriteString(m.renderStatusBar())
 		sb.WriteByte('\n')
 		if bar := m.renderSandboxBar(); bar != "" {
@@ -559,8 +561,6 @@ func (m tuiModel) View() string {
 			sb.WriteString(bar)
 			sb.WriteByte('\n')
 		}
-		sb.WriteString(m.renderInput())
-		sb.WriteByte('\n')
 		sb.WriteString(m.renderFooter())
 	}
 

@@ -366,7 +366,7 @@ func RunTUI(ctx context.Context, eng *engine.AgentEngine, mgr *memory.Manager, s
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(origWriter)
 	m := newTUIModel(eng, idx, mgr, sess, planStore, tracker, reg, runner, ctx, workDir, modelName, sandboxCh, mcpCh)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithContext(ctx), tea.WithMouseCellMotion())
+	p := tea.NewProgram(m, tea.WithContext(ctx))
 	// 后台子代理完成时，经 TaskTracker 通知回调向 TUI 投递 subAgentNotifyMsg，触发即时完成提示。
 	// p.Send 是 goroutine-safe 的，可从后台 goroutine 调用。
 	if tracker != nil {

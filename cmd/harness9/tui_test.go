@@ -25,6 +25,47 @@ func newTestModel() tuiModel {
 	return m
 }
 
+func TestAppendUserMessageLine_AddsSingleBlankLine(t *testing.T) {
+	lines := appendUserMessageLine([]string{"assistant answer"}, "next task")
+	if len(lines) != 3 {
+		t.Fatalf("got %d lines, want 3: %#v", len(lines), lines)
+	}
+	if lines[1] != "" {
+		t.Fatalf("line before user message = %q, want blank", lines[1])
+	}
+	if !strings.Contains(lines[2], "▶ You: next task") {
+		t.Fatalf("user message = %q, want You prefix", lines[2])
+	}
+
+	lines = appendUserMessageLine([]string{"assistant answer", ""}, "another task")
+	if len(lines) != 3 {
+		t.Fatalf("got %d lines after existing blank, want 3: %#v", len(lines), lines)
+	}
+	if lines[2] == "" {
+		t.Fatal("user message should not be blank")
+	}
+}
+
+func TestView_InputAppearsBeforeStatusBar(t *testing.T) {
+	m := newTestModel()
+	m.phase = phaseChat
+	m.lines = []string{"assistant answer"}
+	m.input.SetValue("next task")
+
+	out := m.View()
+	inputPos := strings.Index(out, "next task")
+	statusPos := strings.Index(out, "model:")
+	if inputPos < 0 {
+		t.Fatalf("view does not contain input line: %q", out)
+	}
+	if statusPos < 0 {
+		t.Fatalf("view does not contain status bar: %q", out)
+	}
+	if inputPos >= statusPos {
+		t.Fatalf("input should appear before status bar: input=%d status=%d", inputPos, statusPos)
+	}
+}
+
 // applyUpdate 调用 m.Update(msg)，返回更新后的 tuiModel。
 // 丢弃返回的 tea.Cmd（单元测试中不执行 Cmd）。
 func applyUpdate(m tuiModel, msg tea.Msg) tuiModel {
